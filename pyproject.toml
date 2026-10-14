@@ -1,0 +1,18 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "telegram-ops-kit"
+version = "0.1.0"
+description = "A minimal, safe pattern for operations/approval Telegram bots: single-consumer polling, operator allowlist guard, verified approval cards, rate-limited sends. Pure stdlib."
+readme = "README.md"
+requires-python = ">=3.11"
+license = {text = "MIT"}
+authors = [{name = "ADZ"}]
+
+[project.urls]
+Repository = "https://github.com/Wilshawdirect/telegram-ops-kit"
+
+[tool.setuptools]
+packages = ["tgopskit"]

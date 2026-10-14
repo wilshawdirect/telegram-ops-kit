@@ -1,0 +1,2 @@
+# telegram-ops-kit has no runtime dependencies.
+# Python 3.11+ standard library only (urllib, json, secrets, dataclasses).

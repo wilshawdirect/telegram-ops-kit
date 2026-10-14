@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+
+# Runtime state written by the demo bot
+.tgopskit-offset.json
+.tgopskit-presence.txt
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
