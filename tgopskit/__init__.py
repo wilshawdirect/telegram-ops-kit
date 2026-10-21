@@ -8,7 +8,7 @@ Pure standard library. Five production-hardened pieces:
   sensitive commands, dead-man's heartbeat on every operator interaction.
 * ``ApprovalManager`` -- inline-keyboard approval cards with nonce
   verification, idempotent double-tap handling, and expiry.
-* ``RateLimitedSender`` -- outbound spacing plus exact 429 retry_after respect.
+* ``RateLimitedSender`` -- outbound spacing, exact 429 retry_after respect and a short retry on transport failures.
 * ``Transport`` seam -- ``UrllibTransport`` for the real API,
   ``MockTransport`` for fully offline tests.
 """
@@ -23,6 +23,7 @@ from .transport import (
     RetryAfter,
     TelegramError,
     Transport,
+    TransportError,
     UrllibTransport,
 )
 
@@ -39,6 +40,7 @@ __all__ = [
     "RetryAfter",
     "TelegramError",
     "Transport",
+    "TransportError",
     "UpdatePoller",
     "UrllibTransport",
     "Verdict",

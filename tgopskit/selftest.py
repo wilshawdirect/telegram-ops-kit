@@ -13,7 +13,7 @@ from .approvals import ApprovalManager
 from .guard import OperatorGuard
 from .poller import OffsetStore, UpdatePoller
 from .sender import RateLimitedSender
-from .transport import MockTransport, RetryAfter
+from .transport import MockTransport, RetryAfter, TransportError, UrllibTransport
 
 OPERATOR_ID = 111111
 STRANGER_ID = 222222
@@ -161,6 +161,77 @@ def test_rate_limited_sender() -> None:
     assert len(sends) == 4 and sends[-1]["text"] == "third", "the 429'd send must be retried"
 
 
+def test_transport_failures_are_retried_with_backoff() -> None:
+    transport = MockTransport()
+    clock = FakeClock()
+    sender = RateLimitedSender(transport, min_interval=0.0, sleep=clock.sleep, clock=clock)
+    for _ in range(2):
+        transport.fail_next("sendMessage", TransportError("connection refused", False))
+    sender.send_message(DM_CHAT["id"], "alert")
+    assert clock.sleeps == [0.5, 2.0], clock.sleeps
+    assert len(transport.calls_for("sendMessage")) == 3, "two refused connects, then the send"
+
+    for _ in range(4):
+        transport.fail_next("sendMessage", TransportError("connection refused", False))
+    try:
+        sender.send_message(DM_CHAT["id"], "never arrives")
+    except TransportError:
+        pass
+    else:
+        raise AssertionError("a fourth refused connect must surface, not retry for ever")
+
+    ambiguous = MockTransport()
+    clock = FakeClock()
+    sender = RateLimitedSender(ambiguous, min_interval=0.0, sleep=clock.sleep, clock=clock)
+    ambiguous.fail_next("sendMessage", TransportError("reply lost", True))
+    sender.send_message(DM_CHAT["id"], "maybe delivered")
+    assert len(ambiguous.calls_for("sendMessage")) == 2, "a lost reply is retried once"
+    for _ in range(2):
+        ambiguous.fail_next("sendMessage", TransportError("reply lost", True))
+    try:
+        sender.send_message(DM_CHAT["id"], "twice lost")
+    except TransportError as exc:
+        assert exc.maybe_delivered is True
+    else:
+        raise AssertionError("a second lost reply must surface: no more than one possible duplicate")
+
+
+def test_urllib_transport_classifies_failures() -> None:
+    import socket
+    import urllib.error
+    import urllib.request
+
+    real = urllib.request.urlopen
+
+    class _Reply:
+        def __enter__(self) -> "_Reply":
+            return self
+
+        def __exit__(self, *exc: object) -> None:
+            return None
+
+        def read(self, *_a: Any) -> bytes:
+            raise socket.timeout("timed out")
+
+    try:
+        urllib.request.urlopen = lambda *a, **k: (_ for _ in ()).throw(urllib.error.URLError(ConnectionRefusedError("refused")))
+        try:
+            UrllibTransport("TOKEN").call("getMe")
+        except TransportError as exc:
+            assert exc.maybe_delivered is False and "refused" in exc.description
+        else:
+            raise AssertionError("a refused connect must raise TransportError")
+        urllib.request.urlopen = lambda *a, **k: _Reply()
+        try:
+            UrllibTransport("TOKEN").call("getMe")
+        except TransportError as exc:
+            assert exc.maybe_delivered is True
+        else:
+            raise AssertionError("a read timeout must raise TransportError(maybe_delivered=True)")
+    finally:
+        urllib.request.urlopen = real
+
+
 TESTS = [
     test_operator_guard_and_heartbeat,
     test_offset_persistence,
@@ -169,6 +240,8 @@ TESTS = [
     test_forged_and_unauthorized_callbacks,
     test_card_expiry,
     test_rate_limited_sender,
+    test_transport_failures_are_retried_with_backoff,
+    test_urllib_transport_classifies_failures,
 ]
 
 

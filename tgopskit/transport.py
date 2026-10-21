@@ -8,6 +8,7 @@ directly -- that seam is what makes the whole kit testable without a token.
 """
 from __future__ import annotations
 
+import http.client
 import json
 import urllib.error
 import urllib.request
@@ -31,6 +32,20 @@ class RetryAfter(TelegramError):
     def __init__(self, seconds: int) -> None:
         super().__init__(f"rate limited, retry after {seconds}s", 429)
         self.seconds = seconds
+
+
+class TransportError(TelegramError):
+    """The request never produced a Bot API answer (connection refused, DNS failure, timeout, reset).
+
+    ``maybe_delivered`` says whether Telegram may nevertheless have received the request: ``False`` for a failure
+    before the request left (connect, DNS), ``True`` once it was sent and the reply was lost (read timeout, reset).
+    A sender may retry the first kind freely; retrying the second can duplicate a message, which for an ops alert
+    is still better than losing it.
+    """
+
+    def __init__(self, description: str, maybe_delivered: bool) -> None:
+        super().__init__(description)
+        self.maybe_delivered = maybe_delivered
 
 
 class ConflictError(TelegramError):
@@ -68,12 +83,21 @@ class UrllibTransport:
         )
         try:
             with urllib.request.urlopen(request, timeout=self._timeout) as response:
-                payload = json.load(response)
+                try:
+                    payload = json.load(response)
+                except (TimeoutError, ConnectionError, http.client.HTTPException) as exc:
+                    # the request was sent; only the reply was lost
+                    raise TransportError(f"reply lost after the request was sent: {type(exc).__name__}", True) from exc
         except urllib.error.HTTPError as exc:
             try:
                 payload = json.load(exc)  # Telegram sends JSON bodies on errors too
             except (ValueError, OSError):
                 raise TelegramError(f"HTTP {exc.code} with unreadable body", exc.code) from exc
+        except urllib.error.URLError as exc:
+            # connection refused, DNS failure, connect timeout: nothing reached Telegram
+            raise TransportError(f"could not reach the Bot API: {exc.reason}", False) from exc
+        except TimeoutError as exc:
+            raise TransportError("timed out waiting for the Bot API", True) from exc
         if payload.get("ok"):
             return payload.get("result")
         code = payload.get("error_code")

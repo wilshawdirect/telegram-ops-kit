@@ -21,6 +21,7 @@ that was paid for in an incident:
 | Operator guard, DM-only for sensitive commands | A bot that acts on any message it receives will eventually act for the wrong person. Every update is checked against a static user-id allowlist; sensitive commands are additionally refused outside a private chat. |
 | Approval cards with nonce + idempotency + expiry | Inline-keyboard buttons are tappable by anyone who can see them, callbacks can be forged or redelivered, and humans double-tap. Cards carry an unguessable nonce, re-verify the tapping user, let the first decision win, and expire if unanswered. |
 | Rate-limited sender with `retry_after` respect | Telegram answers floods with 429 plus an explicit backoff; ignoring it and hammering only extends the penalty. |
+| Transport-failure retry | A dropped connection or a lost reply raises `TransportError`; the sender retries one that never left 3 times (0.5 / 2 / 6 s) and one whose reply was lost once, because a duplicate alert beats a lost one. |
 | Dead-man's heartbeat | Downstream automation needs to know a human is still watching. Every allowed operator interaction stamps a presence file, so a watchdog can implement "operator silent too long -> pause autonomous actions". |
 
 ## Quickstart
